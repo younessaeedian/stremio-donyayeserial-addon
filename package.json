@@ -1,0 +1,19 @@
+{
+  "name": "stremio-donyayeserial-addon",
+  "version": "1.0.0",
+  "description": "Addon for DonyayeSerial",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=.env ./index.js",
+    "start": "node ./index.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.1",
+    "node-html-parser": "^6.1.13",
+    "winston": "^3.17.0"
+  }
+}
