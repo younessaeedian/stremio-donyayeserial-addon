@@ -222,12 +222,12 @@ addon.get("/stream/:type/:id.json", async function (req, res, next) {
 
     // لینک‌ها را استخراج می‌کنیم
     // --- شروع تغییر: ارسال providerMovieId ---
-    // ما به این متغیر برای ساختن هدر 'Referer' نیاز داریم
+    // این پارامتر برای ساختن هدر 'Referer' در getSeriesLinks استفاده می‌شود
     streams = await DonyayeSerialProvider.getLinks(
       req.params.type,
       imdbId,
       movieData,
-      providerMovieId // <-- این پارامتر اضافه شد
+      providerMovieId // <-- این پارامتر حیاتی اضافه شد
     );
     // --- پایان تغییر ---
 

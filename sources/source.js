@@ -13,7 +13,7 @@ export default class Source {
   getMovieLinks(movieData) {}
   getSeriesLinks(movieData, imdbId) {}
 
-  // --- شروع تغییر: پارامتر providerMovieId اضافه شد ---
+  // --- شروع تغییر: پارامتر providerMovieId برای هدر Referer اضافه شد ---
   getLinks(type, imdbId, movieData, providerMovieId) {}
   // --- پایان تغییر ---
 
