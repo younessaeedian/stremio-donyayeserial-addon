@@ -3,6 +3,19 @@ import Axios from "axios";
 import { parse } from "node-html-parser";
 import { logAxiosError, searchAndGetTMDB } from "../utils.js"; // searchAndGetTMDB از utils.js می‌آید
 
+// --- شروع تغییر ۱: تعریف هدرهای ثابت مرورگر ---
+// این هدرها در تمام درخواست‌ها مشترک خواهند بود
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9,fa;q=0.8",
+  "Accept-Encoding": "gzip, deflate, br",
+  Connection: "keep-alive",
+};
+// --- پایان تغییر ۱ ---
+
 export default class DonyayeSerial extends Source {
   constructor(baseURL, logger) {
     super(baseURL, logger);
@@ -21,27 +34,19 @@ export default class DonyayeSerial extends Source {
     try {
       this.logger.debug(`DonyayeSerial searching for ${text} (type: ${type})`);
 
-      // --- اصلاحیه: جستجوی هوشمند ---
-      // فاصله‌ها را با + جایگزین می‌کند تا جستجوی پیشرفته به درستی کار کند
       const encodedText = encodeURIComponent(text).replace(/%20/g, "+");
-
       const searchUrl = `https://${this.baseURL}/?s=${encodedText}&search_type=advanced&post_type=${type}`;
-
       this.logger.debug(`Searching URL: ${searchUrl}`);
-      // --- پایان اصلاحیه ---
 
-      // --- اصلاحیه: افزودن هدرهای مرورگر به جستجو ---
+      // --- شروع تغییر ۲: استفاده از هدرهای یکسان در جستجو ---
       const res = await Axios.get(searchUrl, {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml",
-          Referer: `https://${this.baseURL}/`,
+          ...BROWSER_HEADERS, // هدرهای ثابت مرورگر
+          Referer: `https://${this.baseURL}/`, // هدر ارجاع‌دهنده
         },
-        // مجبور کردن Axios به استفاده از IPv4
         family: 4,
       });
-      // --- پایان اصلاحیه ---
+      // --- پایان تغییر ۲ ---
 
       const root = parse(res.data);
       const results = root.querySelectorAll("article.postItems");
@@ -99,18 +104,15 @@ export default class DonyayeSerial extends Source {
 
       this.logger.debug(`Fetching meta from: ${finalUrl}`);
 
-      // --- اصلاحیه: افزودن هدرهای مرورگر به دریافت متا ---
+      // --- شروع تغییر ۳: استفاده از هدرهای یکسان در دریافت متا ---
       const res = await Axios.get(finalUrl, {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml",
-          Referer: `https://${this.baseURL}/`,
+          ...BROWSER_HEADERS, // هدرهای ثابت مرورگر
+          Referer: `https://${this.baseURL}/`, // هدر ارجاع‌دهنده
         },
-        // مجبور کردن Axios به استفاده از IPv4
         family: 4,
       });
-      // --- پایان اصلاحیه ---
+      // --- پایان تغییر ۳ ---
 
       return res.data;
     } catch (e) {
@@ -148,7 +150,6 @@ export default class DonyayeSerial extends Source {
         "Could not find IMDB ID on page. Falling back to TMDB (Method 2)."
       );
 
-      // --- بخش هوشمندسازی ---
       // 2.1. استخراج عنوان
       const titleEl = root.querySelector("h1");
       if (!titleEl) {
@@ -162,19 +163,17 @@ export default class DonyayeSerial extends Source {
 
       // 2.2. استخراج سال (برای جستجوی دقیق‌تر)
       let year = null;
-      const yearEl = root.querySelector('span.pr-item a[href*="/release/"]'); // <a ... href=".../release/2021/">2021</a>
+      const yearEl = root.querySelector('span.pr-item a[href*="/release/"]');
       if (yearEl) {
         year = yearEl.rawText.trim();
         this.logger.debug(`Found year: ${year}`);
       }
 
       // 2.3. تمیز کردن عنوان (حذف سال، پرانتز، و کلمات اضافه)
-      // e.g., "Black.Widow.(2021).SoftSub" -> "Black Widow"
       const cleanTitle = title
-        .replace(/[\(\.\s]\d{4}[\)]?.*$/i, "") // حذف سال (e.g. 2021) و هرچیزی بعد از آن
-        .replace(/\./g, " ") // تبدیل نقطه به فاصله
+        .replace(/[\(\.\s]\d{4}[\)]?.*$/i, "")
+        .replace(/\./g, " ")
         .trim();
-      // --- پایان بخش هوشمندسازی ---
 
       if (cleanTitle === "Unknown" || !cleanTitle) {
         this.logger.error(
@@ -196,7 +195,7 @@ export default class DonyayeSerial extends Source {
       }
 
       // 2.5. جستجو در TMDB (از utils.js)
-      const tmdbData = await searchAndGetTMDB(cleanTitle, year); // <--- ارسال عنوان و سال
+      const tmdbData = await searchAndGetTMDB(cleanTitle, year);
 
       if (tmdbData && tmdbData.external_ids && tmdbData.external_ids.imdb_id) {
         this.logger.debug(
@@ -209,7 +208,7 @@ export default class DonyayeSerial extends Source {
     }
 
     this.logger.error("IMDB ID could not be found by any method.");
-    return null; // Return null if all else fails
+    return null;
   }
 
   /**
@@ -295,17 +294,15 @@ export default class DonyayeSerial extends Source {
     const s = seasonNumber.toString().padStart(2, "0");
     const e = episodeNumber.toString().padStart(2, "0");
 
-    // الگوهای دقیق در اولویت هستند
     const patterns = [
-      `s${s}e${e}`, // s01e01
-      `.e${e}.`, // .e01.
-      `_e${e}_`, // _e01_
-      `-e${e}-`, // -e01-
-      `(${s}x${e})`, // (01x01)
+      `s${s}e${e}`,
+      `.e${e}.`,
+      `_e${e}_`,
+      `-e${e}-`,
+      `(${s}x${e})`,
     ];
 
-    // الگوی قدیمی به عنوان فال‌بک
-    const fallbackPattern = `E${episodeNumber.toString().padStart(2, "0")}`; // E01
+    const fallbackPattern = `E${episodeNumber.toString().padStart(2, "0")}`;
 
     this.logger.debug(
       `Searching for patterns: ${patterns.join(
@@ -318,7 +315,6 @@ export default class DonyayeSerial extends Source {
     for (const fileUrl of mkvFileUrls) {
       const lowerUrl = fileUrl.toLowerCase();
 
-      // چک کردن الگوهای دقیق
       for (const pat of patterns) {
         if (lowerUrl.includes(pat)) {
           this.logger.debug(`Found precise match: ${fileUrl}`);
@@ -326,8 +322,6 @@ export default class DonyayeSerial extends Source {
         }
       }
 
-      // اگر مطابقت دقیق پیدا نشد، الگوی قدیمی را چک می‌کنیم
-      // (حالا که S01E01 را هم چک می‌کنیم، این فال‌بک قوی‌تر است)
       if (
         !potentialMatch &&
         (fileUrl.includes(fallbackPattern) || fileUrl.includes(`S${s}E${e}`))
@@ -337,7 +331,6 @@ export default class DonyayeSerial extends Source {
       }
     }
 
-    // اگر هیچکدام از الگوهای دقیق مطابقت نداشت، به فال‌بک اعتماد می‌کنیم
     if (potentialMatch) {
       this.logger.debug(`Using fallback match: ${potentialMatch}`);
       return potentialMatch;
@@ -351,7 +344,6 @@ export default class DonyayeSerial extends Source {
 
   /**
    * تابع استخراج لینک‌های سریال (بر اساس mirror.html و لینک‌های پوشه)
-   * --- این تابع به طور کامل بازنویسی شده است ---
    */
   async getSeriesLinks(movieData, imdbId, providerMovieId) {
     const streams = [];
@@ -371,25 +363,19 @@ export default class DonyayeSerial extends Source {
         return streams;
       }
 
-      // --- شروع تغییر ۴: تعریف هدرهای کامل مرورگر ---
+      // --- شروع تغییر ۴: استفاده از هدرهای یکسان ---
       const refererUrl = providerMovieId
         ? `https://${this.baseURL}/series/${providerMovieId}/`
         : `https://${this.baseURL}/`;
 
-      const browserHeaders = {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9,fa;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br", // درخواست فشرده‌سازی
-        Connection: "keep-alive", // نگه داشتن اتصال
-        Referer: refererUrl, // <-- مهم: صفحه ارجاع‌دهنده
+      // هدرهای کامل درخواست را می‌سازیم
+      const requestHeaders = {
+        ...BROWSER_HEADERS,
+        Referer: refererUrl,
       };
       this.logger.debug(`Using Referer: ${refererUrl}`);
       // --- پایان تغییر ۴ ---
 
-      // --- شروع تغییر ۵: استفاده از querySelectorAll به جای childNodes ---
       const allElements = downloadBox.querySelectorAll("h3, p, hr");
       if (!allElements || allElements.length === 0) {
         this.logger.error("Could not find any h3/p/hr tags in download box.");
@@ -432,7 +418,6 @@ export default class DonyayeSerial extends Source {
           }
         }
       }
-      // --- پایان تغییر ۵ ---
 
       this.logger.debug(
         `Found ${seasonDirectoryUrls.length} quality directories for S${seasonNumber}`
@@ -447,17 +432,15 @@ export default class DonyayeSerial extends Source {
         try {
           this.logger.debug(`Fetching episode list from directory: ${dir.url}`);
 
-          // --- شروع تغییر ۶: اضافه کردن هدرها و IPv4 به درخواست ---
+          // --- شروع تغییر ۵: استفاده از هدرهای یکسان ---
           const dirRes = await Axios.get(dir.url, {
-            headers: browserHeaders, // <--- هدرهای کامل اینجا اعمال می‌شوند
-            family: 4, // <-- مجبور کردن به استفاده از IPv4
-            timeout: 10000, // 10 ثانیه تایم‌اوت
+            headers: requestHeaders, // هدرهای یکسان اینجا اعمال می‌شوند
+            family: 4,
+            timeout: 10000,
           });
-          // --- پایان تغییر ۶ ---
+          // --- پایان تغییر ۵ ---
 
           const dirRoot = parse(dirRes.data);
-
-          // این سلکتور برای فایل Index of.xhtml عالی عمل می‌کند
           const mkvTags = dirRoot.querySelectorAll('a[href$=".mkv"]');
           if (mkvTags.length === 0) {
             this.logger.warn(`No .mkv files found in directory: ${dir.url}`);
@@ -518,7 +501,6 @@ export default class DonyayeSerial extends Source {
 
   /**
    * تابع اصلی انتخاب منطق (حالا async است)
-   * --- امضای تابع تغییر کرده است ---
    */
   async getLinks(type, imdbId, movieData, providerMovieId = null) {
     if (!movieData) {
@@ -530,9 +512,7 @@ export default class DonyayeSerial extends Source {
       return this.getMovieLinks(movieData);
     }
     if (type === "series") {
-      // --- شروع تغییر ۷: ارسال providerMovieId ---
       return await this.getSeriesLinks(movieData, imdbId, providerMovieId);
-      // --- پایان تغییر ۷ ---
     }
     return [];
   }
