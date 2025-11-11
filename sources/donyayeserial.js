@@ -21,17 +21,16 @@ export default class DonyayeSerial extends Source {
     try {
       this.logger.debug(`DonyayeSerial searching for ${text} (type: ${type})`);
 
-      // --- شروع تغییر ۱: اصلاح نحوه کدگذاری جستجو ---
-      // سایت جستجوی پیشرفته انتظار دارد فاصله‌ها (spaces) به‌جای %20 با + کدگذاری شوند
-      // این کار باعث می‌شود هم "Emerald" و هم "Emerald City" به درستی کار کنند
+      // --- اصلاحیه: جستجوی هوشمند ---
+      // فاصله‌ها را با + جایگزین می‌کند تا جستجوی پیشرفته به درستی کار کند
       const encodedText = encodeURIComponent(text).replace(/%20/g, "+");
 
       const searchUrl = `https://${this.baseURL}/?s=${encodedText}&search_type=advanced&post_type=${type}`;
 
       this.logger.debug(`Searching URL: ${searchUrl}`);
-      // --- پایان تغییر ۱ ---
+      // --- پایان اصلاحیه ---
 
-      // --- شروع تغییر ۲: افزودن هدرهای مرورگر به جستجو ---
+      // --- اصلاحیه: افزودن هدرهای مرورگر به جستجو ---
       const res = await Axios.get(searchUrl, {
         headers: {
           "User-Agent":
@@ -39,15 +38,16 @@ export default class DonyayeSerial extends Source {
           Accept: "text/html,application/xhtml+xml",
           Referer: `https://${this.baseURL}/`,
         },
+        // مجبور کردن Axios به استفاده از IPv4
+        family: 4,
       });
-      // --- پایان تغییر ۲ ---
+      // --- پایان اصلاحیه ---
 
       const root = parse(res.data);
       const results = root.querySelectorAll("article.postItems");
 
       const items = [];
       if (!results || results.length === 0) {
-        // لاگ بهتر برای دیباگ
         this.logger.warn(
           `DonyayeSerial found no results for "${text}" (type: ${type})`
         );
@@ -99,16 +99,18 @@ export default class DonyayeSerial extends Source {
 
       this.logger.debug(`Fetching meta from: ${finalUrl}`);
 
-      // --- شروع تغییر ۳: افزودن هدرهای مرورگر به دریافت متا ---
+      // --- اصلاحیه: افزودن هدرهای مرورگر به دریافت متا ---
       const res = await Axios.get(finalUrl, {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
           Accept: "text/html,application/xhtml+xml",
-          Referer: `https://${this.baseURL}/`, // ارجاع از صفحه اصلی
+          Referer: `https://${this.baseURL}/`,
         },
+        // مجبور کردن Axios به استفاده از IPv4
+        family: 4,
       });
-      // --- پایان تغییر ۳ ---
+      // --- پایان اصلاحیه ---
 
       return res.data;
     } catch (e) {
@@ -325,7 +327,11 @@ export default class DonyayeSerial extends Source {
       }
 
       // اگر مطابقت دقیق پیدا نشد، الگوی قدیمی را چک می‌کنیم
-      if (!potentialMatch && fileUrl.includes(fallbackPattern)) {
+      // (حالا که S01E01 را هم چک می‌کنیم، این فال‌بک قوی‌تر است)
+      if (
+        !potentialMatch &&
+        (fileUrl.includes(fallbackPattern) || fileUrl.includes(`S${s}E${e}`))
+      ) {
         this.logger.debug(`Found potential fallback match: ${fileUrl}`);
         potentialMatch = fileUrl;
       }
@@ -365,9 +371,7 @@ export default class DonyayeSerial extends Source {
         return streams;
       }
 
-      // --- شروع تغییر ۴: تعریف هدرهای مرورگر ---
-      // این هدرها باعث می‌شوند درخواست ما شبیه یک کاربر واقعی به نظر برسد
-      // ما از providerMovieId (مثل: money-heist) برای ساختن Referer استفاده می‌کنیم
+      // --- شروع تغییر ۴: تعریف هدرهای کامل مرورگر ---
       const refererUrl = providerMovieId
         ? `https://${this.baseURL}/series/${providerMovieId}/`
         : `https://${this.baseURL}/`;
@@ -378,13 +382,14 @@ export default class DonyayeSerial extends Source {
         Accept:
           "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9,fa;q=0.8",
-        Referer: refererUrl, // <-- مهم: صفحه ارجاع‌دهنده را مشخص می‌کنیم
+        "Accept-Encoding": "gzip, deflate, br", // درخواست فشرده‌سازی
+        Connection: "keep-alive", // نگه داشتن اتصال
+        Referer: refererUrl, // <-- مهم: صفحه ارجاع‌دهنده
       };
       this.logger.debug(`Using Referer: ${refererUrl}`);
       // --- پایان تغییر ۴ ---
 
       // --- شروع تغییر ۵: استفاده از querySelectorAll به جای childNodes ---
-      // این روش بسیار قوی‌تر است و نودهای متنی خالی را نادیده می‌گیرد
       const allElements = downloadBox.querySelectorAll("h3, p, hr");
       if (!allElements || allElements.length === 0) {
         this.logger.error("Could not find any h3/p/hr tags in download box.");
@@ -398,27 +403,23 @@ export default class DonyayeSerial extends Source {
         const tag = element.tagName.toLowerCase();
         const text = element.rawText;
 
-        // اگر تگ H3 مربوط به فصل مورد نظر را پیدا کردیم
         if (tag === "h3" && text.includes(seasonText)) {
           foundSeasonBlock = true;
           this.logger.debug(`Found season block: ${seasonText}`);
           continue;
         }
 
-        // اگر به تگ H3 یا HR بعدی رسیدیم، یعنی بلاک فصل تمام شده
         if ((tag === "h3" || tag === "hr") && foundSeasonBlock) {
           this.logger.debug("End of season block.");
           break;
         }
 
-        // اگر در بلاک فصل بودیم و تگ P پیدا کردیم
         if (foundSeasonBlock && tag === "p") {
           const linkTag = element.querySelector("a");
           if (linkTag) {
             const url = linkTag.getAttribute("href");
             const title = linkTag.rawText;
 
-            // لینک‌های پوشه همان‌هایی هستند که http دارند ولی mkv/mp4 ندارند
             if (
               url &&
               url.startsWith("http") &&
@@ -446,9 +447,11 @@ export default class DonyayeSerial extends Source {
         try {
           this.logger.debug(`Fetching episode list from directory: ${dir.url}`);
 
-          // --- شروع تغییر ۶: اضافه کردن هدرها به درخواست ---
+          // --- شروع تغییر ۶: اضافه کردن هدرها و IPv4 به درخواست ---
           const dirRes = await Axios.get(dir.url, {
-            headers: browserHeaders, // <--- هدرها اینجا اعمال می‌شوند
+            headers: browserHeaders, // <--- هدرهای کامل اینجا اعمال می‌شوند
+            family: 4, // <-- مجبور کردن به استفاده از IPv4
+            timeout: 10000, // 10 ثانیه تایم‌اوت
           });
           // --- پایان تغییر ۶ ---
 
@@ -472,7 +475,6 @@ export default class DonyayeSerial extends Source {
           if (episodeFile) {
             let fullEpisodeUrl = episodeFile;
 
-            // فایل Index of.xhtml لینک کامل (absolute) می‌دهد
             if (!episodeFile.startsWith("http")) {
               const baseUrl = dir.url.endsWith("/") ? dir.url : dir.url + "/";
               fullEpisodeUrl = baseUrl + episodeFile;
